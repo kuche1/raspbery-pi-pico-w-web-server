@@ -2,15 +2,13 @@
 
 # TODO
 #
-# add HTTP error code to 404
-#
-# make a function that gets and throws away received data
-#
 # ? make header receive timeout hardcoded
 #
 # ? make the file uploading and downloading into separate functions
 #
-# add send_http_404
+# make a function for generic 1-line responses
+#
+# make some sort of admin interface
 
 ##########
 ########## determine platform
@@ -34,7 +32,6 @@ if RP:
     import network
     import uasyncio as asyncio
     import _thread
-
     led = Pin("LED", Pin.OUT)
 else:
     import asyncio
@@ -66,16 +63,14 @@ RECV_HEADER_BYTE_SLEEP = 0.01
 RECV_HEADER_FIRST_LINE_TIMEOUT = 1.2
 RECV_REST_OF_HEADER_TIMEOUT = 4
 
-SEND_404_TIMEOUT = 1
-SEND_RESPONSE_CODE_TIMEOUT = 1
+SEND_GENERIC_RESPONSE_MESSAGE_TIMEOUT = 1
+SEND_HTTP_HEADER_DATA_TIMEOUT = 1
 SEND_SLEEP = 0
 
 FILE_READ_CHUNK = 1024 * 5
 FILE_SEND_CHUNK_TIMEOUT = 1
 
 SCRIPT_EXTENSION = 'fnc'
-
-SHARED_LOCK_ACQUIRE_SLEEP = 0.08
 
 ##########
 ########## classes
@@ -86,8 +81,6 @@ class Shared_data: pass
 NetworkBlockingError = OSError if RP else BlockingIOError
 
 class MaliciousClientError(Exception): pass
-
-class RecvTimeoutError(MaliciousClientError): pass
 
 ##########
 ########## functions
@@ -113,10 +106,11 @@ def connect_to_internet():
         print('connected')
         
         ip, subnet, gateway, dns = wlan.ifconfig()
-        print(f'assigned ip `{ip}`')
     else:
         # assume we already have internet
-        pass
+        ip = '127.0.0.1'
+    
+    print(f'assigned ip `{ip}`')
 
 toggle_led = (lambda:led.toggle()) if RP else (lambda:None)
 
@@ -141,7 +135,12 @@ async def send(con, data, timeout):
     while data:
         if time.time() - start > timeout:
             raise MaliciousClientError('slow download')
-        sent = con.send(data)
+
+        try:
+            sent = con.send(data)
+        except BrokenPipeError: # TODO this is probably OSError instead on the raspbery pi
+            raise MaliciousClientError('connection dropped by client') # TODO wtf why are we not catching this?
+
         data = data[sent:]
         await asyncio.sleep(SEND_SLEEP)
 
@@ -158,7 +157,7 @@ async def recv_header_line(con, timeout, discard=False):
     while True:
         remain = timeout - (time.time() - start)
         if remain <= 0:
-            raise RecvTimeoutError()
+            raise MaliciousClientError('upload too slow')
 
         try:
             byte = con.recv(1)
@@ -181,10 +180,16 @@ async def recv_header_line(con, timeout, discard=False):
 #### send
 
 async def send_http_ok(con):
-    await send(con, b'HTTP/1.1 200 OK\n', SEND_RESPONSE_CODE_TIMEOUT)
+    await send(con, b'HTTP/1.1 200 OK\n', SEND_HTTP_HEADER_DATA_TIMEOUT)
+
+async def send_http_not_found(con):
+    await send(con, b'HTTP/1.1 404 Not Found\n', SEND_HTTP_HEADER_DATA_TIMEOUT)
+
+async def send_http_error(con):
+    await send(con, b'HTTP/1.1 500 Internal Server Error\n', SEND_HTTP_HEADER_DATA_TIMEOUT) # TODO it is OK to have spaces here?
 
 async def send_http_end_of_header(con):
-    await send(con, b'\n', SEND_RESPONSE_CODE_TIMEOUT) # TODO use a different variable; consider the save for `send_http_ok`
+    await send(con, b'\n', SEND_HTTP_HEADER_DATA_TIMEOUT)
 
 ######
 ###### server specific
@@ -195,10 +200,10 @@ async def serve_content_request(con, page):
 
     file = PAGE_FOLDER + page
     if not does_file_exist(file):
-        await send(con, b'404', SEND_404_TIMEOUT)
+        await send_http_not_found(con)
+        await send_http_end_of_header(con)
+        await send(con, b'404', SEND_GENERIC_RESPONSE_MESSAGE_TIMEOUT)
         return
-
-    #print(f'++++ {page=}')
 
     await send_http_ok(con)
     await send_http_end_of_header(con)
@@ -207,19 +212,16 @@ async def serve_content_request(con, page):
         chunk = f.read(FILE_READ_CHUNK)
         await send(con, chunk, FILE_SEND_CHUNK_TIMEOUT)
 
-async def serve_script_request(shared, shared_lock, con, page):
+async def serve_script_request(share, con, page):
     script_name = page
     if script_name.startswith('/'):
         script_name = script_name[1:]
 
     file = SCRIPT_FOLDER + page + '.py'
     if not does_file_exist(file):
-        print(f'script 404: {file}')
         return
 
-    #print(f'++++ exec script: {file=}')
-
-    sys.path.insert(0, SCRIPT_FOLDER) # TODO this is really fucking dangerous
+    sys.path.insert(0, SCRIPT_FOLDER) # this seems iffy, but we have already ensured that this file exists, therefore it will be imported
     if RP:
         sys.path.insert(1, THIS_FILE_LOCATION)
     script = __import__(script_name)
@@ -232,16 +234,9 @@ async def serve_script_request(shared, shared_lock, con, page):
         print(f'ERROR: bad script: {file}')
         return
 
-    # # TODO is this good or is it bad?
-    # while True:
-    #     acquired = shared_lock.acquire(blocking=False)
-    #     if acquired:
-    #         break
-    #     await asyncio.sleep(SHARED_LOCK_ACQUIRE_SLEEP)
-    await script(shared, con)
-    # shared_lock.release()
+    await script(share, con)
 
-async def __serve_requests(shared, shared_lock, con, addr):
+async def __serve_requests(share, con, addr):
 
     header = await recv_header_line(con, RECV_HEADER_FIRST_LINE_TIMEOUT)
     if header.count(' ') != 2:
@@ -265,11 +260,11 @@ async def __serve_requests(shared, shared_lock, con, addr):
     if method == 'GET':
         await serve_content_request(con, page)
     elif method == 'POST':
-        await serve_script_request(shared, shared_lock, con, page)
+        await serve_script_request(share, con, page)
     else:
         raise MaliciousClientError('bad method')
 
-async def _serve_requests(sock, shared, shared_lock):
+async def _serve_requests(sock, share):
     #print('waiting for connection')
     while True:
         try:
@@ -283,18 +278,18 @@ async def _serve_requests(sock, shared, shared_lock):
     toggle_led()
 
     try:
-        await __serve_requests(shared, shared_lock, con, addr)
+        await __serve_requests(share, con, addr)
     finally:
         con.close()
 
-async def serve_requests(sock, shared, shared_lock):
+async def serve_requests(sock, share):
     while True:
         try:
-            await _serve_requests(sock, shared, shared_lock)
-        except MaliciousClientError:
-            pass
+            await _serve_requests(sock, share)
+        except MaliciousClientError as err:
+            print(f'malicious client: {err}')
         except:
-            # TODO not the most appropriate action...
+            asyncio.create_task(serve_requests(sock, share))
             raise
 
 async def _main(sock):
@@ -315,14 +310,13 @@ async def _main(sock):
     sock.listen(1)
     sock.setblocking(False)
 
-    shared = Shared_data()
-    shared_lock = create_lock()
+    share = Shared_data()
 
     # hopefully we can save some performance this way...
     assert SERVING_THREADS > 0
     for _ in range(SERVING_THREADS - 1):
-        asyncio.create_task(serve_requests(sock, shared, shared_lock))
-    await serve_requests(sock, shared, shared_lock)
+        asyncio.create_task(serve_requests(sock, share))
+    await serve_requests(sock, share)
 
 def main():
     connect_to_internet()

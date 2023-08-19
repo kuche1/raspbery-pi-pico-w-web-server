@@ -1,7 +1,7 @@
 
 import time
 
-from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkBlockingError, send
+from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkBlockingError, send, send_http_end_of_header, send_http_error, send_http_ok
 
 RECV_FILE_ID_TIMEOUT = 1
 RECV_RANDOM_HEADER_LINE_TIMEOUT = 1
@@ -48,8 +48,7 @@ async def _page_file_upload_in_progress(con, share):
             break
 
     if file_name == None:
-        await send(con, b'ERROR: could not determine file name', SEND_RESPONSE_TIMEOUT)
-        return
+        file_name = 'ERROR_could_not_determine_file_name'
     
     if file_name.startswith('"') and file_name.endswith('"'):
         if len(file_name) >= 2:
@@ -60,6 +59,8 @@ async def _page_file_upload_in_progress(con, share):
     start = time.time()
     while not share.ft.file_download_in_progress:
         if time.time() - start >= MAX_TIME_WAITING_FOR_UPLOAD:
+            await send_http_error(con)
+            await send_http_end_of_header(con)
             await send(con, b'no one wants to download your file', SEND_RESPONSE_TIMEOUT)
             return
         await asyncio.sleep(WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP)
@@ -99,6 +100,8 @@ async def _page_file_upload_in_progress(con, share):
     while len(share.ft.file_content) > 0:
         await asyncio.sleep(0.5)
     
+    await send_http_ok(con)
+    await send_http_end_of_header(con)
     await send(con, b'file upload complete', SEND_RESPONSE_TIMEOUT)
 
 async def main(share, con):
