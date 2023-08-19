@@ -6,6 +6,8 @@ WAIT_FOR_PIECES_FROM_UPLOADER_SLEEP = 0.06
 
 SEND_RESPONSE_TIMEOUT = 2
 
+SEND_CHUNK_TIMEOUT = 1
+
 async def _page_file_download(con, shared):
     file_name = shared.file_name
     if '"' in file_name:
@@ -19,12 +21,10 @@ async def _page_file_download(con, shared):
     await send_http_end_of_header(con)
     
     while shared.file_upload_is_being_requested:
-        while len(shared.file_content) > 0:
-            data = shared.file_content.pop(0)
-            con.settimeout(None)
-            con.sendall(data)
-            con.settimeout(0)
-            break
+        if len(shared.file_content) > 0:
+            while len(shared.file_content) > 0:
+                data = shared.file_content.pop(0)
+                await send(con, data, SEND_CHUNK_TIMEOUT)
         else:
             await asyncio.sleep(WAIT_FOR_PIECES_FROM_UPLOADER_SLEEP)
 

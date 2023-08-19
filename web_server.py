@@ -68,9 +68,10 @@ RECV_REST_OF_HEADER_TIMEOUT = 4
 
 SEND_404_TIMEOUT = 1
 SEND_RESPONSE_CODE_TIMEOUT = 1
+SEND_SLEEP = 0
 
 FILE_READ_CHUNK = 1024 * 5
-FILE_READ_SLEEP = 0
+FILE_SEND_CHUNK_TIMEOUT = 1
 
 SCRIPT_EXTENSION = 'fnc'
 
@@ -142,6 +143,7 @@ async def send(con, data, timeout):
             raise MaliciousClientError('slow download')
         sent = con.send(data)
         data = data[send:]
+        await asyncio.sleep(SEND_SLEEP)
 
 ######
 ###### server generic
@@ -203,8 +205,7 @@ async def serve_content_request(con, page):
 
     with open(file, 'rb') as f:
         chunk = f.read(FILE_READ_CHUNK)
-        con.sendall(chunk)
-        await asyncio.sleep(FILE_READ_SLEEP)
+        await send(con, chunk, FILE_SEND_CHUNK_TIMEOUT)
 
 async def serve_script_request(shared, shared_lock, con, page):
     script_name = page
