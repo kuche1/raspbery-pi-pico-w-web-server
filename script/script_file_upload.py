@@ -1,17 +1,22 @@
 
-from web_server import recv_header_line, asyncio, MaliciousClientError
+import time
+
+from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkBlockingError
 
 RECV_FILE_ID_TIMEOUT = 1
 RECV_RANDOM_HEADER_LINE_TIMEOUT = 1
 WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP = 0.4
 FILE_UPLOAD_CHUNK = 1024 * 4
-FILE_UPLOAD_MAX_CHUNKS = 5
-SHARED_DATA_FILE_CONTENT_MAX_LEN = 7
+FILE_UPLOAD_CACHE_SIZE = 3 # must not be less than 2 # TODO try change to 2 and remove the define altogether
+SHARED_DATA_FILE_CONTENT_MAX_LEN = 9
+SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP = 0.02
 
 ENCODING = 'utf-8'
 
 RECEIVE_FILE_CHUNK_SLEEP = 0.06
-MAX_TIME_BETWEEN_CHUNK_RECEIVE = 1
+MAX_TIME_BETWEEN_CHUNK_RECEIVE = 2
+
+MAX_TIME_WAITING_FOR_UPLOAD = 40
 
 class File_transfer:
     file_upload_is_being_requested = False
@@ -50,14 +55,14 @@ async def _page_file_upload_in_progress(con, share):
     
     share.ft.file_name = file_name
     
+    start = time.time()
     while not share.ft.file_download_in_progress:
-        # TODO what is the user disconnects?
-        # perhaps add a timer
-        #print('waiting for file download to start...')
+        if time.time() - start >= MAX_TIME_WAITING_FOR_UPLOAD:
+            con.sendall(b'no one wants to download your file')
+            return
         await asyncio.sleep(WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP)
-    print('file download started')
     
-    data = [b''] * FILE_UPLOAD_MAX_CHUNKS
+    data = [b''] * FILE_UPLOAD_CACHE_SIZE
     last_chunk_received = time.time()
     while True:
         if time.time() - last_chunk_received > MAX_TIME_BETWEEN_CHUNK_RECEIVE:
@@ -68,7 +73,6 @@ async def _page_file_upload_in_progress(con, share):
         except NetworkBlockingError:
             await asyncio.sleep(RECEIVE_FILE_CHUNK_SLEEP)
             continue
-        print('received chunk')
         
         data.append(chunk)
         if (data[-2] + data[-1]).endswith(ending):
@@ -77,11 +81,13 @@ async def _page_file_upload_in_progress(con, share):
             break
         
         while len(share.ft.file_content) >= SHARED_DATA_FILE_CONTENT_MAX_LEN:
-            # this might cause an infinite loop if the downloader disconnects
-            await asyncio.sleep(0.5)
+            # TODO this might cause an infinite loop if the downloader disconnects
+            await asyncio.sleep(SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP)
+
         share.ft.file_content.append(data[0])
         del data[0]
-        # this really should be send the data to the sending thread
+
+        last_chunk_received = time.time()
     
     # this ignores the limits
     while len(data) > 0:
@@ -101,7 +107,7 @@ async def main(share, con):
         share.ft = File_transfer()
     
     if share.ft.file_upload_is_being_requested:
-        con.sendall('someone is already requesting a file upload')
+        con.sendall(b'someone is already requesting a file upload')
         return
     
     share.ft.file_upload_is_being_requested = True

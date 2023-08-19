@@ -2,7 +2,7 @@
 from web_server import asyncio
 
 ENCODING = 'utf-8'
-WAIT_FOR_PIECES_FROM_UPLOADER_SLEEP = 0.06
+WAIT_FOR_PIECES_FROM_UPLOADER_SLEEP = 0.02
 
 async def _page_file_download(con, shared):
     file_name = shared.file_name
@@ -23,6 +23,7 @@ Content-disposition: attachment; filename="{file_name}"
             con.settimeout(None)
             con.sendall(data)
             con.settimeout(0)
+            break
         else:
             await asyncio.sleep(WAIT_FOR_PIECES_FROM_UPLOADER_SLEEP)
 
@@ -37,7 +38,7 @@ async def page_file_download(con, shared):
         print('someone is already downloading')
         return
 
-    print('well do a download')
+    #print('well do a download')
 
     shared.file_download_in_progress = True
     try:

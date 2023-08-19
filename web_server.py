@@ -1,11 +1,13 @@
 #! /usr/bin/env python3
 
-# TODO
-#
-# limit header maxlen
+# TODO important but I won't touch it until I get an error
 #
 # replace `con.sendall` with something that checks for blocking
 # and also for upload speed
+# UPDATE
+# alrady happened; on the pi it's `OSError`
+
+# TODO low priority
 #
 # add HTTP error code to 404
 #
@@ -136,7 +138,7 @@ def does_file_exist(path):
 ######
 ###### server generic
 
-async def recv_header_line(con, timeout):
+async def recv_header_line(con, timeout, discard=False):
     end = b'\r\n'
 
     start = time.time()
@@ -155,6 +157,11 @@ async def recv_header_line(con, timeout):
         data += byte
         if data.endswith(end):
             break
+        
+        if discard and len(data) > 3:
+            # leave 1 character so that the caller knows if this was an empty line
+            data = data[-3:]
+
     data = data[:-len(end)]
     data = data.decode()
     return data
@@ -224,7 +231,7 @@ async def __serve_requests(shared, shared_lock, con, addr):
     start = time.time()
     while True:
         remain = RECV_REST_OF_HEADER_TIMEOUT - (time.time() - start)
-        line = await recv_header_line(con, remain)
+        line = await recv_header_line(con, remain, discard=True)
         if not line:
             break
 
@@ -289,10 +296,9 @@ async def _main(sock):
     sock.setblocking(False)
 
     shared = Shared_data()
-    #shared.recv_header_line = recv_header_line # TODO kind of a hack, but will do the job for now
     shared_lock = create_lock()
 
-    # TODO doesn't seem too readable...
+    # hopefully we can save some performance this way...
     assert SERVING_THREADS > 0
     for _ in range(SERVING_THREADS - 1):
         asyncio.create_task(serve_requests(sock, shared, shared_lock))
