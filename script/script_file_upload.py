@@ -7,7 +7,6 @@ RECV_FILE_ID_TIMEOUT = 1
 RECV_RANDOM_HEADER_LINE_TIMEOUT = 1
 WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP = 0.4
 FILE_UPLOAD_CHUNK = 1024 * 4
-FILE_UPLOAD_CACHE_SIZE = 3 # must not be less than 2 # TODO try change to 2 and remove the define altogether
 SHARED_DATA_FILE_CONTENT_MAX_LEN = 9
 SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP = 0.06
 
@@ -65,7 +64,7 @@ async def _page_file_upload_in_progress(con, share):
             return
         await asyncio.sleep(WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP)
     
-    data = [b''] * FILE_UPLOAD_CACHE_SIZE
+    data = b''
     last_chunk_received = time.time()
     while True:
         if time.time() - last_chunk_received > MAX_TIME_BETWEEN_CHUNK_RECEIVE:
@@ -77,18 +76,17 @@ async def _page_file_upload_in_progress(con, share):
             await asyncio.sleep(RECEIVE_FILE_CHUNK_SLEEP)
             continue
         
-        data.append(chunk)
-        if (data[-2] + data[-1]).endswith(ending):
-            del data[-1]
-            del data[-1]
+        data += chunk
+        if data.endswith(ending):
+            data = data[:-len(ending)]
             break
         
         while len(share.ft.file_content) >= SHARED_DATA_FILE_CONTENT_MAX_LEN:
             # TODO this might cause an infinite loop if the downloader disconnects
             await asyncio.sleep(SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP)
 
-        share.ft.file_content.append(data[0])
-        del data[0]
+        share.ft.file_content.append(data[:-len(ending)])
+        data = data[-len(ending):]
 
         last_chunk_received = time.time()
     

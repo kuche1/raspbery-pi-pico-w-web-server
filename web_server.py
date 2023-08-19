@@ -9,6 +9,8 @@
 # make a function for generic 1-line responses
 #
 # make some sort of admin interface
+#
+# generic `recv` function
 
 ##########
 ########## determine platform
