@@ -6,11 +6,11 @@
 #
 # make a function that gets and throws away received data
 #
-# make header receive timeout hardcoded?
+# ? make header receive timeout hardcoded
 #
-# make the file uploading and downloading into separate functions
+# ? make the file uploading and downloading into separate functions
 #
-# add send_http_ok and send_http_404 and such
+# add send_http_404
 
 ##########
 ########## determine platform
@@ -142,7 +142,7 @@ async def send(con, data, timeout):
         if time.time() - start > timeout:
             raise MaliciousClientError('slow download')
         sent = con.send(data)
-        data = data[send:]
+        data = data[sent:]
         await asyncio.sleep(SEND_SLEEP)
 
 ######
