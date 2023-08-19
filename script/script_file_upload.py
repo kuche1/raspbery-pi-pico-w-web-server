@@ -1,7 +1,7 @@
 
 import time
 
-from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkBlockingError
+from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkBlockingError, send
 
 RECV_FILE_ID_TIMEOUT = 1
 RECV_RANDOM_HEADER_LINE_TIMEOUT = 1
@@ -9,7 +9,7 @@ WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP = 0.4
 FILE_UPLOAD_CHUNK = 1024 * 4
 FILE_UPLOAD_CACHE_SIZE = 3 # must not be less than 2 # TODO try change to 2 and remove the define altogether
 SHARED_DATA_FILE_CONTENT_MAX_LEN = 9
-SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP = 0.02
+SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP = 0.06
 
 ENCODING = 'utf-8'
 
@@ -17,6 +17,8 @@ RECEIVE_FILE_CHUNK_SLEEP = 0.06
 MAX_TIME_BETWEEN_CHUNK_RECEIVE = 2
 
 MAX_TIME_WAITING_FOR_UPLOAD = 40
+
+SEND_RESPONSE_TIMEOUT = 2
 
 class File_transfer:
     file_upload_is_being_requested = False
@@ -46,7 +48,7 @@ async def _page_file_upload_in_progress(con, share):
             break
 
     if file_name == None:
-        con.sendall(b'ERROR: could not determine file name')
+        await send(con, b'ERROR: could not determine file name', SEND_RESPONSE_TIMEOUT)
         return
     
     if file_name.startswith('"') and file_name.endswith('"'):
@@ -58,7 +60,7 @@ async def _page_file_upload_in_progress(con, share):
     start = time.time()
     while not share.ft.file_download_in_progress:
         if time.time() - start >= MAX_TIME_WAITING_FOR_UPLOAD:
-            con.sendall(b'no one wants to download your file')
+            await send(con, b'no one wants to download your file', SEND_RESPONSE_TIMEOUT)
             return
         await asyncio.sleep(WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP)
     
@@ -97,8 +99,7 @@ async def _page_file_upload_in_progress(con, share):
     while len(share.ft.file_content) > 0:
         await asyncio.sleep(0.5)
     
-    print(f'file uploaded complete')
-    con.sendall(b'file upload complete')
+    await send(con, b'file upload complete', SEND_RESPONSE_TIMEOUT)
 
 async def main(share, con):
     try:
@@ -107,7 +108,7 @@ async def main(share, con):
         share.ft = File_transfer()
     
     if share.ft.file_upload_is_being_requested:
-        con.sendall(b'someone is already requesting a file upload')
+        await send(con, b'someone is already requesting a file upload', SEND_RESPONSE_TIMEOUT)
         return
     
     share.ft.file_upload_is_being_requested = True

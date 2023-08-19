@@ -1,19 +1,16 @@
 #! /usr/bin/env python3
 
-# TODO important but I won't touch it until I get an error
-#
-# replace `con.sendall` with something that checks for blocking
-# and also for upload speed
-# UPDATE
-# alrady happened; on the pi it's `OSError`
-
-# TODO low priority
+# TODO
 #
 # add HTTP error code to 404
 #
 # make a function that gets and throws away received data
 #
 # make header receive timeout hardcoded?
+#
+# make the file uploading and downloading into separate functions
+#
+# add send_http_ok and send_http_404 and such
 
 ##########
 ########## determine platform
@@ -68,6 +65,9 @@ SOCK_ACCEPT_SLEEP = 0.1
 RECV_HEADER_BYTE_SLEEP = 0.01
 RECV_HEADER_FIRST_LINE_TIMEOUT = 1.2
 RECV_REST_OF_HEADER_TIMEOUT = 4
+
+SEND_404_TIMEOUT = 1
+SEND_RESPONSE_CODE_TIMEOUT = 1
 
 FILE_READ_CHUNK = 1024 * 5
 FILE_READ_SLEEP = 0
@@ -135,8 +135,18 @@ def does_file_exist(path):
     else:
         return os.path.isfile(path)
 
+async def send(con, data, timeout):
+    start = time.time()
+    while data:
+        if time.time() - start > timeout:
+            raise MaliciousClientError('slow download')
+        sent = con.send(data)
+        data = data[send:]
+
 ######
 ###### server generic
+
+#### receive
 
 async def recv_header_line(con, timeout, discard=False):
     end = b'\r\n'
@@ -166,6 +176,14 @@ async def recv_header_line(con, timeout, discard=False):
     data = data.decode()
     return data
 
+#### send
+
+async def send_http_ok(con):
+    await send(con, b'HTTP/1.1 200 OK\n', SEND_RESPONSE_CODE_TIMEOUT)
+
+async def send_http_end_of_header(con):
+    await send(con, b'\n', SEND_RESPONSE_CODE_TIMEOUT) # TODO use a different variable; consider the save for `send_http_ok`
+
 ######
 ###### server specific
 
@@ -175,12 +193,13 @@ async def serve_content_request(con, page):
 
     file = PAGE_FOLDER + page
     if not does_file_exist(file):
-        con.sendall(b'404')
+        await send(con, b'404', SEND_404_TIMEOUT)
         return
 
     #print(f'++++ {page=}')
 
-    con.sendall(b'HTTP/1.1 200 OK\n\n')
+    await send_http_ok(con)
+    await send_http_end_of_header(con)
 
     with open(file, 'rb') as f:
         chunk = f.read(FILE_READ_CHUNK)
