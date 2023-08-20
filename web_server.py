@@ -43,6 +43,8 @@ else:
 ########## defines
 ##########
 
+DEBUG = True
+
 PAGE_FOLDER = f'page'
 SCRIPT_FOLDER = f'script'
 
@@ -76,7 +78,7 @@ SCRIPT_EXTENSION = 'fnc'
 class Shared_data: pass
 
 NetworkReceiveBlockingError = OSError if RP else BlockingIOError
-NetworkSendError = OSError if RP else BrokenPipeError
+#NetworkSendError = OSError if RP else BrokenPipeError
 
 class MaliciousClientError(Exception): pass
 
@@ -134,10 +136,22 @@ async def send(con, data, timeout):
         if time.time() - start > timeout:
             raise MaliciousClientError('slow download')
 
-        try:
-            sent = con.send(data)
-        except NetworkSendError:
-            raise MaliciousClientError('connection dropped by client') # TODO wtf why are we not catching this (tested on linux)?
+        # try:
+        #     sent = con.send(data)
+        # except NetworkSendError:
+        #     raise MaliciousClientError('connection dropped by client') # TODO wtf why are we not catching this (tested on linux)? NOTE: this is being catched on the raspbery
+
+        if RP:
+            try:
+                sent = con.send(data)
+            except OSError:
+                await asyncio.sleep(SEND_SLEEP)
+                continue
+        else:
+            try:
+                sent = con.send(data)
+            except BrokenPipeError:
+                raise MaliciousClientError('connection dropped by client')
 
         data = data[sent:]
         await asyncio.sleep(SEND_SLEEP)
@@ -289,6 +303,9 @@ async def serve_requests(sock, share):
             await _serve_requests(sock, share)
         except MaliciousClientError as err:
             print(f'malicious client: {err}')
+            if DEBUG:
+                asyncio.create_task(serve_requests(sock, share))
+                raise
         except:
             asyncio.create_task(serve_requests(sock, share))
             raise
