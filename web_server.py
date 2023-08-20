@@ -11,6 +11,9 @@
 # make some sort of admin interface
 #
 # generic `recv` function
+#
+# setting all async sleeps to 0 increases file transfer speed from about 90 to about 130
+# see if the sleeps can be tuned for better performance
 
 ##########
 ########## determine platform
@@ -59,7 +62,7 @@ SERVING_THREADS = 5
 
 SOCK_ACCEPT_SLEEP = 0.1
 RECV_HEADER_BYTE_SLEEP = 0.01
-RECV_HEADER_FIRST_LINE_TIMEOUT = 1.2
+RECV_HEADER_FIRST_LINE_TIMEOUT = 2.4
 RECV_REST_OF_HEADER_TIMEOUT = 4
 
 SEND_GENERIC_RESPONSE_MESSAGE_TIMEOUT = 1

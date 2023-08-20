@@ -6,7 +6,7 @@ WAIT_FOR_PIECES_FROM_UPLOADER_SLEEP = 0.06
 
 SEND_RESPONSE_TIMEOUT = 2
 
-SEND_CHUNK_TIMEOUT = 1
+SEND_CHUNK_TIMEOUT = 2
 
 async def _page_file_download(con, share):
     file_name = share.ft.file_name
