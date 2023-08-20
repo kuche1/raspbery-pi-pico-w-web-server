@@ -83,7 +83,6 @@ SCRIPT_EXTENSION = 'fnc'
 class Shared_data: pass
 
 NetworkReceiveBlockingError = OSError if RP else BlockingIOError
-#NetworkSendError = OSError if RP else BrokenPipeError
 
 class MaliciousClientError(Exception): pass
 
@@ -140,11 +139,6 @@ async def send(con, data, timeout):
     while data:
         if time.time() - start > timeout:
             raise MaliciousClientError('slow download')
-
-        # try:
-        #     sent = con.send(data)
-        # except NetworkSendError:
-        #     raise MaliciousClientError('connection dropped by client') # TODO wtf why are we not catching this (tested on linux)? NOTE: this is being catched on the raspbery
 
         if RP:
             try:

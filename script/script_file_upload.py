@@ -8,7 +8,8 @@ RECV_RANDOM_HEADER_LINE_TIMEOUT = 1
 WAIT_FOR_FILE_DOWNLOAD_TO_START_SLEEP = 0.4
 FILE_UPLOAD_CHUNK = 1024 * 4
 SHARED_DATA_FILE_CONTENT_MAX_LEN = 9
-SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP = 0.06
+SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_SLEEP = 0.06
+SHARED_DATA_FILE_CONTENT_WAIT_FOR_BUFFER_TIMEOUT = 8
 
 ENCODING = 'utf-8'
 
@@ -81,9 +82,11 @@ async def _page_file_upload_in_progress(con, share):
             data = data[:-len(ending)]
             break
         
+        start = time.time()
         while len(share.ft.file_content) >= SHARED_DATA_FILE_CONTENT_MAX_LEN:
-            # TODO this might cause an infinite loop if the downloader disconnects
-            await asyncio.sleep(SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_LEEP)
+            if time.time() - start > SHARED_DATA_FILE_CONTENT_WAIT_FOR_BUFFER_TIMEOUT:
+                raise MaliciousClientError('can not send chunk to download thread; client probably stopped the download')
+            await asyncio.sleep(SHARED_DATA_FILE_CONTENT_MAX_LEN_RECHED_SLEEP)
 
         share.ft.file_content.append(data[:-len(ending)])
         data = data[-len(ending):]
