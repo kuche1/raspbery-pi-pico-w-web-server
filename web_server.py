@@ -60,7 +60,8 @@ LED_WIFI_CONNECT = 0.7
 
 BIND_PORT = 80 if RP else 8080
 
-SERVING_THREADS = 5
+SERVING_THREADS = 5 # setting this to 5 or 3 doesn't seem to change the download speed
+MAIN_LOOP_SLEEP = 1_000
 
 SOCK_ACCEPT_SLEEP = 0.1
 RECV_HEADER_BYTE_SLEEP = 0.01
@@ -248,21 +249,17 @@ async def serve_script_request(share, con, page):
 
 async def __serve_requests(share, con, addr):
 
-    #print('+++ receiving first line of header')
     header = await recv_header_line(con, RECV_HEADER_FIRST_LINE_TIMEOUT)
-    #print('+++ receiving first line of header: done')
     if header.count(' ') != 2:
         raise MaliciousClientError('bad header format')
     method, page, proto = header.split(' ')
 
-    #print('+++ receiving rest of header')
     start = time.time()
     while True:
         remain = RECV_REST_OF_HEADER_TIMEOUT - (time.time() - start)
         line = await recv_header_line(con, remain, discard=True)
         if not line:
             break
-    #print('+++ receiving rest of header: done')
 
     if '..' in page:
         # TODO not the best solution
@@ -329,11 +326,11 @@ async def _main(sock):
 
     share = Shared_data()
 
-    # hopefully we can save some performance this way...
-    assert SERVING_THREADS > 0
-    for _ in range(SERVING_THREADS - 1):
+    for _ in range(SERVING_THREADS):
         asyncio.create_task(serve_requests(sock, share))
-    await serve_requests(sock, share)
+
+    while True:
+        await asyncio.sleep(MAIN_LOOP_SLEEP)
 
 def main():
     connect_to_internet()
