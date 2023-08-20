@@ -14,8 +14,6 @@
 #
 # setting all async sleeps to 0 increases file transfer speed from about 90 to about 130
 # see if the sleeps can be tuned for better performance
-#
-# reduce the number of serving threads and see if that improves the performance
 
 ##########
 ########## determine platform
@@ -60,7 +58,7 @@ LED_WIFI_CONNECT = 0.7
 
 BIND_PORT = 80 if RP else 8080
 
-SERVING_THREADS = 5 # setting this to 5 or 3 doesn't seem to change the download speed
+SERVING_THREADS = 5 # setting this to 5 or 3 doesn't seem to change the download speed (on the board)
 MAIN_LOOP_SLEEP = 1_000
 
 SOCK_ACCEPT_SLEEP = 0.1
