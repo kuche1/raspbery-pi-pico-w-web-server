@@ -43,16 +43,11 @@ else:
 ########## defines
 ##########
 
-if RP:
-    THIS_FILE_LOCATION = 'web_server'
-else:
-    THIS_FILE_LOCATION = os.path.dirname(__file__)
+PAGE_FOLDER = f'page'
+SCRIPT_FOLDER = f'script'
 
-PAGE_FOLDER = f'{THIS_FILE_LOCATION}/page'
-SCRIPT_FOLDER = f'{THIS_FILE_LOCATION}/script'
-
-WIFI_SSID_FILE = f'{THIS_FILE_LOCATION}/wifi-ssid'
-WIFI_PASS_FILE = f'{THIS_FILE_LOCATION}/wifi-pass'
+WIFI_SSID_FILE = f'wifi-ssid'
+WIFI_PASS_FILE = f'wifi-pass'
 
 LED_WIFI_CONNECT = 0.7
 
@@ -226,13 +221,7 @@ async def serve_script_request(share, con, page):
 
     sys.path.insert(0, SCRIPT_FOLDER) # this seems iffy, but we have already ensured that this file exists, therefore it will be imported
     try:
-        if RP:
-            sys.path.insert(1, THIS_FILE_LOCATION)
-        try:
-            script = __import__(script_name)
-        finally:
-            if RP:
-                del sys.path[0]
+        script = __import__(script_name)
     finally:
         del sys.path[0]
 
@@ -246,17 +235,21 @@ async def serve_script_request(share, con, page):
 
 async def __serve_requests(share, con, addr):
 
+    #print('+++ receiving first line of header')
     header = await recv_header_line(con, RECV_HEADER_FIRST_LINE_TIMEOUT)
+    #print('+++ receiving first line of header: done')
     if header.count(' ') != 2:
         raise MaliciousClientError('bad header format')
     method, page, proto = header.split(' ')
 
+    #print('+++ receiving rest of header')
     start = time.time()
     while True:
         remain = RECV_REST_OF_HEADER_TIMEOUT - (time.time() - start)
         line = await recv_header_line(con, remain, discard=True)
         if not line:
             break
+    #print('+++ receiving rest of header: done')
 
     if '..' in page:
         # TODO not the best solution
