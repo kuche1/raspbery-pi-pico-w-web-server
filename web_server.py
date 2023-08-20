@@ -14,6 +14,8 @@
 #
 # setting all async sleeps to 0 increases file transfer speed from about 90 to about 130
 # see if the sleeps can be tuned for better performance
+#
+# add support for SSL
 
 ##########
 ########## determine platform
