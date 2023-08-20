@@ -80,7 +80,8 @@ SCRIPT_EXTENSION = 'fnc'
 
 class Shared_data: pass
 
-NetworkBlockingError = OSError if RP else BlockingIOError
+NetworkReceiveBlockingError = OSError if RP else BlockingIOError
+NetworkSendError = OSError if RP else BrokenPipeError
 
 class MaliciousClientError(Exception): pass
 
@@ -140,8 +141,8 @@ async def send(con, data, timeout):
 
         try:
             sent = con.send(data)
-        except BrokenPipeError: # TODO this is probably OSError instead on the raspbery pi
-            raise MaliciousClientError('connection dropped by client') # TODO wtf why are we not catching this?
+        except NetworkSendError:
+            raise MaliciousClientError('connection dropped by client') # TODO wtf why are we not catching this (tested on linux)?
 
         data = data[sent:]
         await asyncio.sleep(SEND_SLEEP)
@@ -163,7 +164,7 @@ async def recv_header_line(con, timeout, discard=False):
 
         try:
             byte = con.recv(1)
-        except NetworkBlockingError:
+        except NetworkReceiveBlockingError:
             await asyncio.sleep(RECV_HEADER_BYTE_SLEEP)
             continue
 
@@ -224,11 +225,16 @@ async def serve_script_request(share, con, page):
         return
 
     sys.path.insert(0, SCRIPT_FOLDER) # this seems iffy, but we have already ensured that this file exists, therefore it will be imported
-    if RP:
-        sys.path.insert(1, THIS_FILE_LOCATION)
-    script = __import__(script_name)
-    del sys.path[0]
-    del sys.path[0]
+    try:
+        if RP:
+            sys.path.insert(1, THIS_FILE_LOCATION)
+        try:
+            script = __import__(script_name)
+        finally:
+            if RP:
+                del sys.path[0]
+    finally:
+        del sys.path[0]
 
     try:
         script = script.main
@@ -271,7 +277,7 @@ async def _serve_requests(sock, share):
     while True:
         try:
             con, addr = sock.accept()
-        except NetworkBlockingError:
+        except NetworkReceiveBlockingError:
             await asyncio.sleep(SOCK_ACCEPT_SLEEP)
         else:
             break

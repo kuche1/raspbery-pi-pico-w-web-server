@@ -1,7 +1,7 @@
 
 import time
 
-from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkBlockingError, send, send_http_end_of_header, send_http_error, send_http_ok
+from web_server import recv_header_line, asyncio, MaliciousClientError, NetworkReceiveBlockingError, send, send_http_end_of_header, send_http_error, send_http_ok
 
 RECV_FILE_ID_TIMEOUT = 1
 RECV_RANDOM_HEADER_LINE_TIMEOUT = 1
@@ -72,7 +72,7 @@ async def _page_file_upload_in_progress(con, share):
 
         try:
             chunk = con.recv(FILE_UPLOAD_CHUNK)
-        except NetworkBlockingError:
+        except NetworkReceiveBlockingError:
             await asyncio.sleep(RECEIVE_FILE_CHUNK_SLEEP)
             continue
         
