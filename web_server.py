@@ -242,10 +242,10 @@ async def serve_script_request(share, con, page):
     try:
         script = script.main
     except AttributeError:
-        print(f'ERROR: bad script: {file}')
+        print(f'ERROR: bad script: `{file}`')
         return
 
-    await script(share, con)
+    await script(share, con) # TODO what if main is not async ?
 
 async def __serve_requests(share, con, addr):
 
