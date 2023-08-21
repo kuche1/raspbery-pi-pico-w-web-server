@@ -59,6 +59,7 @@ WIFI_PASS_FILE = f'wifi-pass'
 LED_WIFI_CONNECT = 0.7
 
 BIND_PORT = 80 if RP else 8080
+SOCK_LISTEN = 5
 
 SERVING_THREADS = 5 # setting this to 5 or 3 doesn't seem to change the download speed (on the board)
 MAIN_LOOP_SLEEP = 1_000
@@ -321,7 +322,7 @@ async def _main(sock):
     print(f'trying to bind to port {BIND_PORT}')
     sock.bind(('', BIND_PORT))
     print('bound')
-    sock.listen(1)
+    sock.listen(SOCK_LISTEN)
     sock.setblocking(False)
 
     share = Shared_data()
