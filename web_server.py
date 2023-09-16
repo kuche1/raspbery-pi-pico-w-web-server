@@ -45,7 +45,7 @@ else:
     import threading
 
 ##########
-########## defines
+########## server related defines
 ##########
 
 DEBUG = True
@@ -77,6 +77,14 @@ FILE_READ_CHUNK = 1024 * 5
 FILE_SEND_CHUNK_TIMEOUT = 1
 
 SCRIPT_EXTENSION = 'fnc'
+
+##########
+########## generic defines
+##########
+
+if RP:
+    INODE_TYPE_FOLDER = 0x4000
+    INODE_TYPE_FILE = 0x8000
 
 ##########
 ########## classes
@@ -129,10 +137,19 @@ def create_lock():
 def does_file_exist(path):
     if RP:
         try:
-            open(path, 'rb')
+            info = os.stat(path)
         except OSError:
-            return False
-        return True
+            return False # such entity does not exist
+        
+        type_ = info[0]
+        return type_ == INODE_TYPE_FILE
+
+        ### Old implementation
+        # try:
+        #     open(path, 'rb')
+        # except OSError:
+        #     return False
+        # return True
     else:
         return os.path.isfile(path)
 
@@ -286,7 +303,7 @@ async def _serve_requests(sock, share):
         else:
             break
     #print('connection!')
-    
+
     toggle_led()
 
     try:
